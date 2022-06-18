@@ -5,24 +5,18 @@ services:
       - .env.docker
     container_name: redis
     image: redis:6.2.6
-    ports:
-      - 6379:6379
     healthcheck:
       test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
   postgres:
     image: postgres:14.2
     env_file:
       - .env.docker
-    ports:
-      - 5432:5432
   auth:
     build:
       context: .
     env_file:
       - .env.docker
     container_name: api
-    ports:
-      - 5000:5000
     depends_on:
       - postgres
       - redis
