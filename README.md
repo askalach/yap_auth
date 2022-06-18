@@ -83,7 +83,7 @@ services:
 ```
 docker run -d -p6831:6831/udp -p16686:16686 jaegertracing/all-in-one:latest
 ```
-* В файле .env указазать следующие переменные окружения:
+* В файле .env.docker указазать следующие переменные окружения:
 ```
 OTEL_RESOURCE_ATTRIBUTES="service.name=auth"
 OTEL_PYTHON_FLASK_EXCLUDED_URLS="swagger"
@@ -91,3 +91,22 @@ JAEGER_PORT=6831
 JAEGER_HOST=localhost
 ```
 - Для отключения сбора телементрии в переменной OTEL_PYTHON_FLASK_EXCLUDED_URLS указать значние ".+"
+
+## Партицирование
+Добавлено партицирование таблицы истории входов пользователей по дате входа
+
+## Вход через социальные сервисы
+Добавлена регистрация и аутентификация пользователей в Auth-сервисе, через социальные сервисы vkontakte и yandex
+
+В файле .env.docker указазать следующие переменные окружения:
+```
+VK_APP_ID=vk_app_id
+VK_APP_SECRET=vk_app_secret
+
+YANDEX_APP_ID=yandex_app_id
+YANDEX_APP_SECRET=yandex_app_secret
+```
+
+Для получения данных требуется:
+- [Зарегистрировать](https://yandex.ru/dev/id/doc/dg/oauth/tasks/register-client.html) приложение на Яндекс.OAuth.
+- Зарегистрировать приложение на vk.com - [инструкция](https://vk.com/dev/first_guide?f=2.%20Регистрация%20приложения)
