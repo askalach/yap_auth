@@ -1,7 +1,7 @@
 """add partitioning to users_history
 
 Revision ID: 42370031f013
-Revises: 861577600544
+Revises: 05c25ab126cc
 Create Date: 2022-06-17 12:31:28.728933
 
 """
@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '42370031f013'
-down_revision = '861577600544'
+down_revision = '05c25ab126cc'
 branch_labels = None
 depends_on = None
 
