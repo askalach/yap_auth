@@ -1,3 +1,5 @@
+from http import HTTPStatus
+
 from flask import abort, request
 from flask.wrappers import Request, Response
 from flask_jwt_extended.utils import get_jwt_identity
@@ -21,11 +23,11 @@ def before_request():
     key = user_id or key_from_headers(request)
 
     if not rate_limit.check(key):
-        abort(429)
+        abort(HTTPStatus.TOO_MANY_REQUESTS.value)
 
     # X-Request-ID header must be in request
     if not request_id:
-        raise abort(Response(status=400, response="X-Request-ID header must be in request."))
+        raise abort(Response(status=HTTPStatus.BAD_REQUEST.value, response="X-Request-ID header must be in request."))
 
     from opentelemetry import trace
 

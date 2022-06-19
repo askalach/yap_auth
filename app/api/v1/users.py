@@ -1,4 +1,5 @@
 import logging
+from http import HTTPStatus
 
 from flask import abort, request
 from flask_jwt_extended.view_decorators import jwt_required
@@ -36,18 +37,18 @@ class UsersAPI(Resource):
     ):
         user = api_service.get(id)
         if not user:
-            abort(404)
+            abort(HTTPStatus.NOT_FOUND.value)
         return user_schema_resp.dump(user)
 
     @jwt_required()
     @ns.doc(description="Удаление пользователя по id.")
-    @ns.response(204, 'User has been deleted.')
-    @ns.response(404, 'ID not found.')
+    @ns.response(HTTPStatus.NO_CONTENT.value, 'User has been deleted.')
+    @ns.response(HTTPStatus.NOT_FOUND.value, 'ID not found.')
     def delete(self, id: int):
         result = api_service.delete(id=id)
         if result:
-            return ok20x(http_code=204)
-        return abort(404)
+            return ok20x(http_code=HTTPStatus.NO_CONTENT.value)
+        return abort(HTTPStatus.NOT_FOUND.value)
 
     @ns.deprecated
     @jwt_required()
@@ -55,10 +56,10 @@ class UsersAPI(Resource):
         try:
             user_schema.load(request.json)
         except ValidationError as err:
-            return err.messages, 400
+            return err.messages, HTTPStatus.BAD_REQUEST.value
         if not api_service.update_user(id, request.json):
-            return abort(404)
-        return ok20x(http_code=204)
+            return abort(HTTPStatus.NOT_FOUND.value)
+        return ok20x(http_code=HTTPStatus.NO_CONTENT.value)
 
 
 @ns.route("/")
@@ -71,7 +72,7 @@ class UsersAPIOther(Resource):
             user_schema.load(request.json)
             user = api_service.create(request.json)
         except ValidationError as err:
-            return err.messages, 400
+            return err.messages, HTTPStatus.BAD_REQUEST.value
         return user_schema_resp.dump(user)
 
 
@@ -83,27 +84,27 @@ class UsersRolesAPI(Resource):
     def get(self, id: int):
         roles = api_service.get_roles(id)
         if not roles:
-            abort(404)
+            abort(HTTPStatus.NOT_FOUND.value)
         return roles_schema.dump(roles)
 
     @jwt_required()
     @ns.expect(UserDto.user_roles_req)
     @ns.doc(description="Удаление ролей пользователя.")
-    @ns.response(204, 'Roles has been deleted.')
-    @ns.response(404, 'ID not found.')
+    @ns.response(HTTPStatus.NO_CONTENT.value, 'Roles has been deleted.')
+    @ns.response(HTTPStatus.NOT_FOUND.value, 'ID not found.')
     def delete(self, id: int):
         result = api_service.delete_roles(id=id, roles_id=dict(request.json)["ids"])
         if result:
-            return ok20x(http_code=204)
-        return abort(404)
+            return ok20x(http_code=HTTPStatus.NO_CONTENT.value)
+        return abort(HTTPStatus.NOT_FOUND.value)
 
     @jwt_required()
     @ns.expect(UserDto.user_roles_req)
     @ns.doc(description="Изменение ролей пользователя.")
-    @ns.response(201, 'Roles has been updated.')
-    @ns.response(404, 'ID not found.')
+    @ns.response(HTTPStatus.CREATED.value, 'Roles has been updated.')
+    @ns.response(HTTPStatus.NOT_FOUND.value, 'ID not found.')
     def post(self, id: int):
         result = api_service.add_roles(id=id, roles_id=dict(request.json)["ids"])
         if result:
-            return ok20x(http_code=201)
-        return abort(404)
+            return ok20x(http_code=HTTPStatus.CREATED.value)
+        return abort(HTTPStatus.NOT_FOUND.value)

@@ -1,5 +1,7 @@
 import logging
 from functools import lru_cache
+from http import HTTPStatus
+from locale import strcoll
 from pathlib import Path
 from typing import Optional
 
@@ -46,42 +48,55 @@ class UsersService:
         self.session = db.session
         self.storage = storage
 
-    def register(self, payload, agent):
+    def _add_user_to_db(self, data: dict) -> int:
+        user = Users(**data)
+        self.session.add(user)
+        self.session.commit()
+        return user.id
+
+    def _add_default_role(self, id: int) -> None:
+        user_role = UserRoles(user_id=id, role_id=Roles.query.filter_by(name=settings.default_role).first().id)
+        self.session.add(user_role)
+        self.session.commit()
+
+    def _to_users_history(self, id: int, agent: str) -> None:
+        history_item = UsersHistory(user_id=id, user_agent=agent)
+        self.session.add(history_item)
+        self.session.commit()
+
+    def _response_with_tokens(self, id: int, msg: str) -> dict:
+        resp = message(True, msg)
+        resp["access_token"] = create_access_token(identity=id)
+        resp["refresh_token"] = create_refresh_token(identity=id)
+        resp["user"] = id
+
+        return resp
+
+    def _response_without_tokens(self, id: int, msg: str) -> dict:
+        resp = message(True, msg)
+        resp["user"] = id
+
+        return resp
+
+    def register(self, payload: dict, agent: str) -> tuple:
         email = payload["email"]
 
         # Check if the email is taken
         if Users.query.filter_by(email=email).first() is not None:
-            return err_resp("Email is already being used.", "email_taken", 403)
+            return err_resp("Email is already being used.", "email_taken", HTTPStatus.FORBIDDEN.value)
 
         # Validation
         try:
-            user = Users(**payload)
-            self.session.add(user)
-            self.session.commit()
+            user_id = self._add_user_to_db(payload)
+            self._add_default_role(user_id)
+            self._to_users_history(user_id, agent)
 
-            # All registered users from API have default role - user
-            user_role = UserRoles(user_id=user.id, role_id=Roles.query.filter_by(name=settings.default_role).first().id)
-            self.session.add(user_role)
-            self.session.commit()
-
-            history_item = UsersHistory(user_id=user.id, user_agent=agent)
-            self.session.add(history_item)
-            self.session.commit()
-
-            access_token = create_access_token(identity=user.id)
-            refresh_token = create_refresh_token(identity=user.id)
-
-            resp = message(True, "User has been registered.")
-            resp["access_token"] = access_token
-            resp["refresh_token"] = refresh_token
-            resp["user"] = user.id
-
-            return resp, 201
+            return self._response_with_tokens(user_id, "User has been registered."), HTTPStatus.CREATED.value
         except Exception as e:
             logger.error(e)
             return internal_err_resp()
 
-    def login(self, payload, agent):
+    def login(self, payload: dict, agent: str) -> tuple:
         email = payload["email"]
         password = payload["password"]
 
@@ -91,105 +106,73 @@ class UsersService:
                 return err_resp(
                     "The email you have entered does not match any account.",
                     "email_404",
-                    404,
+                    HTTPStatus.NOT_FOUND.value,
                 )
 
             elif user and user.verify_password(password):
-                history_item = UsersHistory(user_id=user.id, user_agent=agent)
-                self.session.add(history_item)
-                self.session.commit()
+                self._to_users_history(user.id, agent)
 
-                access_token = create_access_token(identity=user.id)
-                refresh_token = create_refresh_token(identity=user.id)
+                return self._response_with_tokens(user.id, "Successfully logged in."), HTTPStatus.OK.value
 
-                resp = message(True, "Successfully logged in.")
-                resp["access_token"] = access_token
-                resp["refresh_token"] = refresh_token
-                resp["user"] = user.id
-
-                return resp, 200
-
-            return err_resp("Failed to log in, password may be incorrect.", "password_invalid", 401)
+            return err_resp("Failed to log in, password may be incorrect.", "password_invalid", HTTPStatus.UNAUTHORIZED.value)
 
         except Exception as e:
             logger.error(e)
             return internal_err_resp()
 
-    def login_vk(self, payload, agent):
+    def social_login(self, payload: dict, agent: str) -> tuple:
         email = payload["email"]
         if user := Users.query.filter_by(email=email).first():
+            logger.info("Update user")
+            user_id = user.id
             Users.query.filter_by(email=email).update(payload)
             self.session.commit()
         else:
             logger.info("New user")
             payload["password"] = get_random_string(12)
-            user = Users(**payload)
-            self.session.add(user)
-            self.session.commit()
 
-            # All registered users from API have default role - user
-            user_role = UserRoles(user_id=user.id, role_id=Roles.query.filter_by(name=settings.default_role).first().id)
-            self.session.add(user_role)
-            self.session.commit()
+            user_id = self._add_user_to_db(payload)
+            self._add_default_role(user_id)
 
-        history_item = UsersHistory(user_id=user.id, user_agent=agent)
-        self.session.add(history_item)
-        self.session.commit()
+        self._to_users_history(user_id, agent)
 
-        access_token = create_access_token(identity=user.id)
-        refresh_token = create_refresh_token(identity=user.id)
-
-        resp = message(True, "User has logged by vk.")
-        resp["access_token"] = access_token
-        resp["refresh_token"] = refresh_token
-        resp["user"] = user.id
-
-        return resp, 200
+        return self._response_with_tokens(user_id, "User has logged by vk."), HTTPStatus.OK.value
 
     @user_has(permissions=["user"])
-    def refresh(self):
-        identity = get_jwt_identity()
+    def refresh(self) -> tuple:
+        user_id = get_jwt_identity()
 
-        access_token = create_access_token(identity=identity)
-        refresh_token = create_refresh_token(identity=identity)
-
-        resp = message(True, "Successfully refresh tokens.")
-        resp["access_token"] = access_token
-        resp["refresh_token"] = refresh_token
-        resp["user"] = identity
-
-        return resp, 200
+        return self._response_with_tokens(user_id, "Successfully refresh tokens."), HTTPStatus.OK.value
 
     @user_has(permissions=["user"])
-    def logout(self, jti, ttype):
+    def logout(self, jti: str, ttype: strcoll) -> tuple:
+        user_id = get_jwt_identity()
         self.storage.put_to_storage(jti, "", settings.JWT_ACCESS_TOKEN_EXPIRES)
-        resp = message(True, f"{ttype.capitalize()} token successfully revoked.")
-        return resp, 200
+
+        return self._response_without_tokens(user_id, f"{ttype.capitalize()} token successfully revoked."), HTTPStatus.OK.value
 
     @user_has(permissions=["user"])
-    def update(self, payload) -> Optional[bool]:
-        identity = get_jwt_identity()
+    def update(self, payload: dict) -> tuple:
+        user_id = get_jwt_identity()
         if "password" in payload.keys():
             payload["password_hash"] = get_password_hash(payload["password"])
             del payload["password"]
         if "email" in payload.keys():
-            if Users.query.filter((Users.email == payload["email"]) & (Users.id != identity)).first() is not None:
-                return err_resp("Email is already being used.", "email_taken", 403)
+            if Users.query.filter((Users.email == payload["email"]) & (Users.id != user_id)).first() is not None:
+                return err_resp("Email is already being used.", "email_taken", HTTPStatus.FORBIDDEN.value)
 
         try:
-            Users.query.filter_by(id=identity).update(payload)
+            Users.query.filter_by(id=user_id).update(payload)
             self.session.commit()
-            resp = message(True, "Successfully updated user info.")
-            resp["user"] = identity
 
-            return resp, 200
+            return self._response_without_tokens(user_id, "Successfully updated user info."), HTTPStatus.OK.value
 
         except ValueError as e:
             logger.error(e)
             return internal_err_resp()
 
     @user_has(permissions=["user"])
-    def get_history(self, page):
+    def get_history(self, page: int) -> tuple:
         identity = get_jwt_identity()
         try:
             history_data = (
@@ -201,7 +184,7 @@ class UsersService:
                 result.append(histoty_schema.dump(item))
             resp = message(True, "Successfully get user auth history.")
             resp["history"] = result
-            return resp, 200
+            return resp, HTTPStatus.OK.value
 
         except Exception as e:
             logger.error(e)
