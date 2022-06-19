@@ -40,7 +40,7 @@ class SocialVKAuthorize(Resource):
 
             user_agent = request.headers.get("User-Agent")
 
-            users_service.login_vk(user_data, user_agent)
+            users_service.social_login(user_data, user_agent)
 
         except Exception as e:
             logger.error(e)
@@ -88,7 +88,7 @@ class SocialYandexAuthorize(Resource):
 
             user_agent = request.headers.get("User-Agent")
 
-            users_service.login_vk(user_data, user_agent)
+            users_service.social_login(user_data, user_agent)
 
         except Exception as e:
             logger.error(e)

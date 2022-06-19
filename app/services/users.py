@@ -120,9 +120,10 @@ class UsersService:
             logger.error(e)
             return internal_err_resp()
 
-    def login_vk(self, payload: dict, agent: str) -> tuple:
+    def social_login(self, payload: dict, agent: str) -> tuple:
         email = payload["email"]
         if Users.query.filter_by(email=email).first():
+            logger.info("Update user")
             Users.query.filter_by(email=email).update(payload)
             self.session.commit()
         else:
