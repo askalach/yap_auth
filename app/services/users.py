@@ -1,5 +1,6 @@
 import logging
 from functools import lru_cache
+from http import HTTPStatus
 from locale import strcoll
 from pathlib import Path
 from typing import Optional
@@ -64,12 +65,9 @@ class UsersService:
         self.session.commit()
 
     def _response_with_tokens(self, id: int, msg: str) -> dict:
-        access_token = create_access_token(identity=id)
-        refresh_token = create_refresh_token(identity=id)
-
         resp = message(True, msg)
-        resp["access_token"] = access_token
-        resp["refresh_token"] = refresh_token
+        resp["access_token"] = create_access_token(identity=id)
+        resp["refresh_token"] = create_refresh_token(identity=id)
         resp["user"] = id
 
         return resp
@@ -85,7 +83,7 @@ class UsersService:
 
         # Check if the email is taken
         if Users.query.filter_by(email=email).first() is not None:
-            return err_resp("Email is already being used.", "email_taken", 403)
+            return err_resp("Email is already being used.", "email_taken", HTTPStatus.FORBIDDEN.value)
 
         # Validation
         try:
@@ -93,7 +91,7 @@ class UsersService:
             self._add_default_role(user_id)
             self._to_users_history(user_id, agent)
 
-            return self._response_with_tokens(user_id, "User has been registered."), 201
+            return self._response_with_tokens(user_id, "User has been registered."), HTTPStatus.CREATED.value
         except Exception as e:
             logger.error(e)
             return internal_err_resp()
@@ -108,15 +106,15 @@ class UsersService:
                 return err_resp(
                     "The email you have entered does not match any account.",
                     "email_404",
-                    404,
+                    HTTPStatus.NOT_FOUND.value,
                 )
 
             elif user and user.verify_password(password):
                 self._to_users_history(user.id, agent)
 
-                return self._response_with_tokens(user.id, "Successfully logged in."), 200
+                return self._response_with_tokens(user.id, "Successfully logged in."), HTTPStatus.OK.value
 
-            return err_resp("Failed to log in, password may be incorrect.", "password_invalid", 401)
+            return err_resp("Failed to log in, password may be incorrect.", "password_invalid", HTTPStatus.UNAUTHORIZED.value)
 
         except Exception as e:
             logger.error(e)
@@ -136,20 +134,20 @@ class UsersService:
 
         self._to_users_history(user_id, agent)
 
-        return self._response_with_tokens(user_id, "User has logged by vk."), 200
+        return self._response_with_tokens(user_id, "User has logged by vk."), HTTPStatus.OK.value
 
     @user_has(permissions=["user"])
     def refresh(self) -> tuple:
         user_id = get_jwt_identity()
 
-        return self._response_with_tokens(user_id, "Successfully refresh tokens."), 200
+        return self._response_with_tokens(user_id, "Successfully refresh tokens."), HTTPStatus.OK.value
 
     @user_has(permissions=["user"])
     def logout(self, jti: str, ttype: strcoll) -> tuple:
         user_id = get_jwt_identity()
         self.storage.put_to_storage(jti, "", settings.JWT_ACCESS_TOKEN_EXPIRES)
 
-        return self._response_without_tokens(user_id, f"{ttype.capitalize()} token successfully revoked."), 200
+        return self._response_without_tokens(user_id, f"{ttype.capitalize()} token successfully revoked."), HTTPStatus.OK.value
 
     @user_has(permissions=["user"])
     def update(self, payload: dict) -> tuple:
@@ -159,13 +157,13 @@ class UsersService:
             del payload["password"]
         if "email" in payload.keys():
             if Users.query.filter((Users.email == payload["email"]) & (Users.id != user_id)).first() is not None:
-                return err_resp("Email is already being used.", "email_taken", 403)
+                return err_resp("Email is already being used.", "email_taken", HTTPStatus.FORBIDDEN.value)
 
         try:
             Users.query.filter_by(id=user_id).update(payload)
             self.session.commit()
 
-            return self._response_without_tokens(user_id, "Successfully updated user info."), 200
+            return self._response_without_tokens(user_id, "Successfully updated user info."), HTTPStatus.OK.value
 
         except ValueError as e:
             logger.error(e)
@@ -184,7 +182,7 @@ class UsersService:
                 result.append(histoty_schema.dump(item))
             resp = message(True, "Successfully get user auth history.")
             resp["history"] = result
-            return resp, 200
+            return resp, HTTPStatus.OK.value
 
         except Exception as e:
             logger.error(e)

@@ -1,3 +1,5 @@
+from http import HTTPStatus
+
 import click
 from flask import Blueprint
 from sqlalchemy.exc import IntegrityError
@@ -27,7 +29,7 @@ def create(firstname, lastname, email, password):
         "password": password,
     }
     result = user_service.register(agent="superuser", payload=payload)
-    if result[1] != 201:
+    if result[1] != HTTPStatus.CREATED.value:
         return click.echo("Can't create superuser:\n{0}".format(result))
     super_user_role: Roles = Roles.query.filter((Roles.id == 1) & (Roles.name == "superuser")).first()
 
