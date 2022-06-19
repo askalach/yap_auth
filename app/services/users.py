@@ -122,8 +122,9 @@ class UsersService:
 
     def social_login(self, payload: dict, agent: str) -> tuple:
         email = payload["email"]
-        if Users.query.filter_by(email=email).first():
+        if user := Users.query.filter_by(email=email).first():
             logger.info("Update user")
+            user_id = user.id
             Users.query.filter_by(email=email).update(payload)
             self.session.commit()
         else:
